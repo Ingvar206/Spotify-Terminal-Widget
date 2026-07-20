@@ -14,7 +14,7 @@ view of Spotify, and flips into a real zsh terminal on click.
 - Smooth progress bar, clickable to seek
 - Play/pause, previous/next
 - Window sits at desktop level (behind all normal windows), draggable, no dock icon
-- Snaps into an invisible desktop grid when you drop it (like real macOS desktop widgets) and reopens there next time
+- Remembers where you last dropped it and reopens there next time
 - Starts automatically when you log into your Mac (toggle via right-click)
 
 **Terminal side** (terminal button top right, appears on hover)

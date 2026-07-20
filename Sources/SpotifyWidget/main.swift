@@ -32,11 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private static let topLeftDefaultsKey = "WidgetTopLeftOrigin"
     private static let hasConfiguredLoginItemKey = "WidgetHasConfiguredLoginItem"
-    // Invisible grid the widget snaps to when dropped, approximating the
-    // desktop icon grid real macOS desktop widgets align themselves to.
-    private static let gridSize: CGFloat = 80
-
-    private var snapTimer: Timer?
+    // Real desktop widgets never sit flush against the screen edge - they
+    // always keep a bit of breathing room, even when dragged as far as
+    // possible in one direction.
+    private static let edgeMargin: CGFloat = 16
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let size = WidgetWindow.playerSize
@@ -64,16 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Restore the last position the user dragged the widget to, if any.
         if let topLeft = Self.loadSavedTopLeft() {
-            window.setFrameOrigin(Self.snappedOrigin(forTopLeft: topLeft, size: size))
+            window.setFrameOrigin(Self.clampedOrigin(forTopLeft: topLeft, size: size))
         } else if let screen = NSScreen.main {
             // First launch: place in the top-right corner of the main screen.
             let vf = screen.visibleFrame
             let origin = NSPoint(
-                x: vf.maxX - size.width - 24,
-                y: vf.maxY - size.height - 24
+                x: vf.maxX - size.width - Self.edgeMargin,
+                y: vf.maxY - size.height - Self.edgeMargin
             )
-            let topLeft = NSPoint(x: origin.x, y: origin.y + size.height)
-            window.setFrameOrigin(Self.snappedOrigin(forTopLeft: topLeft, size: size))
+            window.setFrameOrigin(origin)
         } else {
             window.center()
         }
@@ -93,31 +91,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         true
     }
 
-    // MARK: - Position persistence & grid snapping
+    // MARK: - Position persistence & screen-edge margin
 
     func windowDidMove(_ notification: Notification) {
+        clampToScreenEdges()
         saveTopLeft()
-
-        // Snap once the drag settles (debounced) rather than on every pixel
-        // of movement, so dragging still feels smooth and only the final
-        // drop position snaps into the grid - like the real desktop widgets.
-        snapTimer?.invalidate()
-        snapTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
-            self?.snapToGrid()
-        }
     }
 
-    private func snapToGrid() {
-        guard let win = window else { return }
+    // Stops the widget right at the margin instead of letting it be dragged
+    // flush against (or past) the screen edge, like real desktop widgets.
+    private func clampToScreenEdges() {
+        guard let win = window, let screen = win.screen ?? NSScreen.main else { return }
         let frame = win.frame
-        let topLeft = NSPoint(x: frame.origin.x, y: frame.origin.y + frame.size.height)
-        let target = Self.snappedOrigin(forTopLeft: topLeft, size: frame.size)
-
-        guard abs(target.x - frame.origin.x) > 0.5 || abs(target.y - frame.origin.y) > 0.5 else { return }
-
-        var newFrame = frame
-        newFrame.origin = target
-        win.setFrame(newFrame, display: true, animate: true)
+        let clamped = Self.clampedOrigin(frame.origin, size: frame.size, in: screen.visibleFrame)
+        guard clamped != frame.origin else { return }
+        win.setFrameOrigin(clamped)
     }
 
     private func saveTopLeft() {
@@ -133,23 +121,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return NSPoint(x: x, y: y)
     }
 
-    /// Snaps a dropped top-left point onto the invisible desktop grid and
-    /// keeps it on-screen even if the display setup changed (e.g. an
-    /// external monitor got disconnected) since the last run.
-    private static func snappedOrigin(forTopLeft topLeft: NSPoint, size: CGSize) -> NSPoint {
+    /// Keeps a restored top-left point on-screen (respecting the edge margin)
+    /// even if the display setup changed (e.g. an external monitor got
+    /// disconnected) since the last run.
+    private static func clampedOrigin(forTopLeft topLeft: NSPoint, size: CGSize) -> NSPoint {
         let containing = NSScreen.screens.first { $0.frame.contains(topLeft) } ?? NSScreen.main
-        guard let vf = containing?.visibleFrame else {
-            return NSPoint(x: topLeft.x, y: topLeft.y - size.height)
-        }
+        let origin = NSPoint(x: topLeft.x, y: topLeft.y - size.height)
+        guard let vf = containing?.visibleFrame else { return origin }
+        return clampedOrigin(origin, size: size, in: vf)
+    }
 
-        let relativeX = topLeft.x - vf.minX
-        let relativeTopY = vf.maxY - topLeft.y
-        let snappedX = (relativeX / gridSize).rounded() * gridSize + vf.minX
-        let snappedTopY = vf.maxY - (relativeTopY / gridSize).rounded() * gridSize
+    /// Keeps `origin` within `visibleFrame`, leaving `edgeMargin` of breathing
+    /// room on every side - real desktop widgets never sit flush against the
+    /// screen edge.
+    private static func clampedOrigin(_ origin: NSPoint, size: CGSize, in visibleFrame: NSRect) -> NSPoint {
+        var origin = origin
+        let minX = visibleFrame.minX + edgeMargin
+        let maxX = visibleFrame.maxX - edgeMargin - size.width
+        let minY = visibleFrame.minY + edgeMargin
+        let maxY = visibleFrame.maxY - edgeMargin - size.height
 
-        var origin = NSPoint(x: snappedX, y: snappedTopY - size.height)
-        origin.x = min(max(origin.x, vf.minX), vf.maxX - size.width)
-        origin.y = min(max(origin.y, vf.minY), vf.maxY - size.height)
+        // If the widget is wider/taller than the screen minus margins, fall
+        // back to centering it rather than producing an inverted range.
+        origin.x = minX <= maxX ? min(max(origin.x, minX), maxX) : (visibleFrame.minX + visibleFrame.maxX - size.width) / 2
+        origin.y = minY <= maxY ? min(max(origin.y, minY), maxY) : (visibleFrame.minY + visibleFrame.maxY - size.height) / 2
         return origin
     }
 }

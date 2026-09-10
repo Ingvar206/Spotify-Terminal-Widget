@@ -7,6 +7,7 @@ struct RootView: View {
     @StateObject private var spotify = SpotifyController()
     @State private var flipped = false
     @State private var terminalCreated = false // only start the shell on the first flip
+    @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
 
     var body: some View {
         ZStack {
@@ -25,11 +26,19 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(.white.opacity(0.14), lineWidth: 1)
         )
+        .contextMenu {
+            Button(launchAtLoginEnabled ? "Autostart deaktivieren" : "Bei Anmeldung starten") {
+                LaunchAtLogin.toggle()
+                launchAtLoginEnabled = LaunchAtLogin.isEnabled
+            }
+            Divider()
+            Button("Widget beenden") { NSApp.terminate(nil) }
+        }
         .onAppear { spotify.start() }
     }
 
@@ -54,23 +63,25 @@ struct PlayerView: View {
         ZStack {
             PlayerBackground(artwork: spotify.artwork, accent: spotify.accent)
 
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 ArtworkView(artwork: spotify.artwork,
                             accent: spotify.accent,
                             isPlaying: spotify.track.isPlaying)
 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 1) {
                             MarqueeText(text: spotify.track.title,
-                                        font: .system(size: 17, weight: .bold, design: .rounded))
+                                        font: .system(size: 14, weight: .bold, design: .rounded),
+                                        lineHeight: 17)
                                 .foregroundStyle(.white)
                             MarqueeText(text: spotify.track.artist.isEmpty
                                             ? " " : spotify.track.artist,
-                                        font: .system(size: 13, weight: .medium, design: .rounded))
+                                        font: .system(size: 11, weight: .medium, design: .rounded),
+                                        lineHeight: 14)
                                 .foregroundStyle(.white.opacity(0.7))
                         }
-                        Spacer(minLength: 8)
+                        Spacer(minLength: 6)
                         EqualizerBars(playing: spotify.track.isPlaying, color: spotify.accent)
                     }
 
@@ -80,9 +91,8 @@ struct PlayerView: View {
 
                     ControlsRow(spotify: spotify)
                 }
-                .padding(.vertical, 2)
             }
-            .padding(18)
+            .padding(14)
 
             // Corner buttons (only visible on hover)
             VStack {
@@ -173,22 +183,22 @@ struct ArtworkView: View {
                         .aspectRatio(contentMode: .fill)
                 } else {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(.white.opacity(0.08))
                         Image(systemName: "music.note")
-                            .font(.system(size: 34))
+                            .font(.system(size: 26))
                             .foregroundStyle(.white.opacity(0.4))
                     }
                 }
             }
-            .frame(width: 118, height: 118)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .frame(width: 104, height: 104)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .shadow(color: accent.opacity(0.35 + 0.35 * pulse),
-                    radius: 10 + 10 * pulse)
+                    radius: 8 + 8 * pulse)
             .scaleEffect(isPlaying ? 1.0 : 0.96)
             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isPlaying)
         }
-        .frame(width: 118, height: 118)
+        .frame(width: 104, height: 104)
     }
 }
 
@@ -203,14 +213,14 @@ struct ProgressBar: View {
             let duration = max(spotify.track.duration, 1)
             let fraction = min(max(position / duration, 0), 1)
 
-            VStack(spacing: 3) {
+            VStack(spacing: 2) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(.white.opacity(0.18))
                         Capsule()
                             .fill(spotify.accent)
                             .frame(width: max(4, geo.size.width * fraction))
-                            .shadow(color: spotify.accent.opacity(0.7), radius: 4)
+                            .shadow(color: spotify.accent.opacity(0.7), radius: 3)
                     }
                     .contentShape(Rectangle())
                     .gesture(
@@ -221,18 +231,18 @@ struct ProgressBar: View {
                             }
                     )
                 }
-                .frame(height: 5)
+                .frame(height: 4)
 
                 HStack {
                     Text(formatTime(position))
                     Spacer()
                     Text(formatTime(spotify.track.duration))
                 }
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.55))
             }
         }
-        .frame(height: 22)
+        .frame(height: 18)
     }
 }
 
@@ -242,14 +252,14 @@ struct ControlsRow: View {
     @ObservedObject var spotify: SpotifyController
 
     var body: some View {
-        HStack(spacing: 22) {
+        HStack(spacing: 14) {
             Spacer()
-            ControlButton(systemName: "backward.fill", size: 15) { spotify.prevTrack() }
+            ControlButton(systemName: "backward.fill", size: 12) { spotify.prevTrack() }
             ControlButton(systemName: spotify.track.isPlaying ? "pause.fill" : "play.fill",
-                          size: 21, prominent: true, accent: spotify.accent) {
+                          size: 16, prominent: true, accent: spotify.accent) {
                 spotify.playPause()
             }
-            ControlButton(systemName: "forward.fill", size: 15) { spotify.nextTrack() }
+            ControlButton(systemName: "forward.fill", size: 12) { spotify.nextTrack() }
             Spacer()
         }
     }
@@ -268,7 +278,7 @@ struct ControlButton: View {
             Image(systemName: systemName)
                 .font(.system(size: size, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: prominent ? 42 : 32, height: prominent ? 42 : 32)
+                .frame(width: prominent ? 32 : 24, height: prominent ? 32 : 24)
                 .background(
                     Circle().fill(prominent ? accent.opacity(0.85)
                                             : .white.opacity(hovering ? 0.16 : 0.0))
@@ -311,21 +321,21 @@ struct EqualizerBars: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .bottom, spacing: 3) {
+            HStack(alignment: .bottom, spacing: 2) {
                 ForEach(0..<5, id: \.self) { i in
                     let phase = Double(i) * 0.9
                     let speed = 2.2 + Double(i) * 0.45
                     let height: CGFloat = playing
-                        ? 5 + 15 * abs(sin(t * speed + phase))
-                        : 4
-                    RoundedRectangle(cornerRadius: 2)
+                        ? 4 + 10 * abs(sin(t * speed + phase))
+                        : 3
+                    RoundedRectangle(cornerRadius: 1.5)
                         .fill(color)
-                        .frame(width: 4, height: height)
+                        .frame(width: 3, height: height)
                         .animation(.easeOut(duration: 0.3), value: playing)
                 }
             }
         }
-        .frame(width: 32, height: 22, alignment: .bottom)
+        .frame(width: 24, height: 16, alignment: .bottom)
     }
 }
 
@@ -334,6 +344,7 @@ struct EqualizerBars: View {
 struct MarqueeText: View {
     let text: String
     let font: Font
+    var lineHeight: CGFloat = 22
 
     @State private var textWidth: CGFloat = 0
     @State private var containerWidth: CGFloat = 0
@@ -371,11 +382,9 @@ struct MarqueeText: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { animate = true }
                 }
         }
-        .frame(height: fontLineHeight)
+        .frame(height: lineHeight)
         .clipped()
     }
-
-    private var fontLineHeight: CGFloat { 22 }
 }
 
 // MARK: - System blur (NSVisualEffectView)
